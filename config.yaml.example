@@ -1,0 +1,16 @@
+# Example configuration for Gmail Keep-Alive
+
+# Path to the OAuth client credentials file you download from Google Cloud Console
+client_secret_path: "client_secret.json"
+
+# Path to store the token (auto-generated after OAuth flow)
+token_path: "token.json"
+
+# Scopes required (adjust as needed)
+scopes:
+  - "https://www.googleapis.com/auth/gmail.readonly"
+
+# List of accounts to keep alive
+accounts:
+  - label: "primary"
+    # Additional per-account settings can be added here
