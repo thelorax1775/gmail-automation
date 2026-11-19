@@ -1,5 +1,7 @@
-google-auth
-google-auth-oauthlib
-google-api-python-client
-PyYAML
-requests
+# Each package: the oldest version the tests are run against, and below the
+# next major version so an incompatible release is not picked up unnoticed.
+google-auth>=2.23.0,<3
+google-auth-oauthlib>=1.1.0,<2
+google-api-python-client>=2.100.0,<3
+PyYAML>=6.0.1,<7
+requests>=2.31.0,<3

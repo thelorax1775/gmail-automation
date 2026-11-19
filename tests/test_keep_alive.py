@@ -64,8 +64,8 @@ def write_fake_token(tmp_path):
 def run_main(monkeypatch, tmp_path, caplog):
     """Call keep_alive.main() as ``keep_alive.py --config <path>``.
 
-    main() changes into the script's folder; monkeypatch.chdir() makes pytest
-    put the working directory back afterwards.
+    The run starts in tmp_path; monkeypatch.chdir() makes pytest put the
+    working directory back afterwards.
     """
     monkeypatch.chdir(tmp_path)
     caplog.set_level(logging.INFO)
@@ -507,3 +507,219 @@ def test_failed_write_leaves_the_previous_token_file_intact(tmp_path, patched_lo
     assert token.read_text() == before
     # The temporary file is cleaned up, so no stray copy of the token is left.
     assert sorted(os.listdir(tmp_path)) == ["client_secret.json", "token.json"]
+
+
+# --- The --config path, the config file's content and unsupported keys -------
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(keep_alive.__file__))
+
+
+@pytest.fixture
+def run_in(monkeypatch, caplog):
+    """Call main() as ``keep_alive.py --config <argument>`` started in a folder.
+
+    The login is replaced by a mock that hands back a canned Gmail client, so
+    nothing is read or written at the paths the config names. Returns that
+    mock; ``login.call_args.args[0]`` is the config main() passed to the login.
+    """
+    caplog.set_level(logging.INFO)
+
+    def _run(start_dir, config_argument):
+        monkeypatch.chdir(start_dir)
+        monkeypatch.setattr(
+            sys, "argv", ["keep_alive.py", "--config", str(config_argument)]
+        )
+
+        def canned_gmail(*args, **kwargs):
+            # Built only when the login is reached, so a run that stops at the
+            # config logs nothing but its own lines.
+            return fake_gmail(
+                ({"status": "200"}, json.dumps({"emailAddress": FAKE_ADDRESS}))
+            )[0]
+
+        with mock.patch.object(
+            keep_alive, "get_gmail_service", side_effect=canned_gmail
+        ) as login:
+            try:
+                keep_alive.main()
+            finally:
+                _run.login = login
+        return login
+
+    return _run
+
+
+def records_at(caplog, level):
+    return [r for r in caplog.records if r.levelno == level]
+
+
+def test_relative_config_path_is_found_where_the_command_was_started(
+    run_in, tmp_path, caplog
+):
+    start_dir = tmp_path / "started-here"
+    start_dir.mkdir()
+    assert os.path.realpath(start_dir) != os.path.realpath(SCRIPT_DIR)
+    marker = str(tmp_path / "marker-token.json")
+    (start_dir / "rel.yaml").write_text(json.dumps({"token_path": marker}))
+
+    login = run_in(start_dir, "rel.yaml")
+
+    login.assert_called_once()
+    assert login.call_args.args[0]["token_path"] == marker
+    assert "Config file not found" not in caplog.text
+    assert FAKE_ADDRESS in caplog.text
+
+
+def test_relative_config_path_in_a_subfolder_of_the_start_directory(
+    run_in, tmp_path
+):
+    (tmp_path / "conf").mkdir()
+    marker = str(tmp_path / "marker-token.json")
+    (tmp_path / "conf" / "rel.yaml").write_text(json.dumps({"token_path": marker}))
+
+    login = run_in(tmp_path, os.path.join("conf", "rel.yaml"))
+
+    assert login.call_args.args[0]["token_path"] == marker
+
+
+def test_relative_paths_inside_the_config_resolve_against_the_script_folder(
+    run_in, tmp_path
+):
+    (tmp_path / "rel.yaml").write_text(
+        'token_path: "state/token.json"\nclient_secret_path: "secret.json"\n'
+    )
+
+    login = run_in(tmp_path, "rel.yaml")
+
+    config = login.call_args.args[0]
+    assert config["token_path"] == os.path.join(SCRIPT_DIR, "state", "token.json")
+    assert config["client_secret_path"] == os.path.join(SCRIPT_DIR, "secret.json")
+
+
+def test_absolute_paths_inside_the_config_are_kept(run_in, tmp_path):
+    token = str(tmp_path / "elsewhere" / "token.json")
+    secret = str(tmp_path / "elsewhere" / "client_secret.json")
+    config_file = write_config(tmp_path, token_path=token, client_secret_path=secret)
+
+    login = run_in(tmp_path, config_file)
+
+    config = login.call_args.args[0]
+    assert config["token_path"] == token
+    assert config["client_secret_path"] == secret
+
+
+def test_empty_mapping_uses_the_documented_defaults_in_the_script_folder(
+    run_in, tmp_path, caplog
+):
+    (tmp_path / "config.yaml").write_text("{}\n")
+
+    login = run_in(tmp_path, "config.yaml")
+
+    config = login.call_args.args[0]
+    assert config["token_path"] == os.path.join(SCRIPT_DIR, "token.json")
+    assert config["client_secret_path"] == os.path.join(
+        SCRIPT_DIR, "client_secret.json"
+    )
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+
+
+@pytest.mark.parametrize(
+    "content, problem",
+    [
+        ("", "is empty"),
+        ("\n\n", "is empty"),
+        ("# only a comment\n# token_path: token.json\n", "is empty"),
+        ("- token_path: token.json\n", "mapping"),
+        ("just some text\n", "mapping"),
+        ("42\n", "mapping"),
+        ("token_path: [unclosed\n", "not valid YAML"),
+        ("token_path: 5\n", "token_path must be a file path"),
+        ("client_secret_path:\n", "client_secret_path must be a file path"),
+    ],
+    ids=[
+        "empty",
+        "blank-lines",
+        "comments-only",
+        "list",
+        "string",
+        "number",
+        "invalid-yaml",
+        "path-is-a-number",
+        "path-is-blank",
+    ],
+)
+def test_unusable_config_exits_1_with_one_line_naming_the_file(
+    run_in, tmp_path, caplog, content, problem
+):
+    (tmp_path / "bad.yaml").write_text(content)
+
+    with pytest.raises(SystemExit) as exit_info:
+        run_in(tmp_path, "bad.yaml")
+
+    assert exit_info.value.code == 1
+    run_in.login.assert_not_called()
+    assert len(caplog.records) == 1
+    record = caplog.records[0]
+    assert record.levelno == logging.ERROR
+    message = record.getMessage()
+    assert "\n" not in message
+    assert str(tmp_path / "bad.yaml") in message
+    assert problem in message
+    assert "AttributeError" not in caplog.text
+    assert "NoneType" not in caplog.text
+    assert "has no attribute" not in caplog.text
+    assert "Error during keep-alive" not in caplog.text
+
+
+def test_unsupported_keys_get_one_warning_each_and_the_run_carries_on(
+    run_in, tmp_path, caplog
+):
+    token = str(tmp_path / "token.json")
+    (tmp_path / "old.yaml").write_text(
+        json.dumps(
+            {
+                "token_path": token,
+                "scopes": ["https://www.googleapis.com/auth/gmail.readonly"],
+                "accounts": [{"label": "primary"}, {"label": "second"}],
+            }
+        )
+    )
+
+    login = run_in(tmp_path, "old.yaml")
+
+    login.assert_called_once()
+    assert login.call_args.args[0]["token_path"] == token
+    assert FAKE_ADDRESS in caplog.text
+    warnings = [r.getMessage() for r in records_at(caplog, logging.WARNING)]
+    assert len(warnings) == 2
+    for key in ("scopes", "accounts"):
+        about_key = [w for w in warnings if "the %s setting" % key in w]
+        assert len(about_key) == 1
+        assert "ignored" in about_key[0]
+        assert str(tmp_path / "old.yaml") in about_key[0]
+    assert not records_at(caplog, logging.ERROR)
+
+
+def test_only_the_unsupported_key_that_is_present_is_warned_about(
+    run_in, tmp_path, caplog
+):
+    (tmp_path / "old.yaml").write_text("accounts: []\n")
+
+    run_in(tmp_path, "old.yaml")
+
+    warnings = [r.getMessage() for r in records_at(caplog, logging.WARNING)]
+    assert len(warnings) == 1
+    assert "the accounts setting" in warnings[0]
+
+
+def test_example_config_offers_only_settings_the_script_reads(caplog):
+    example = os.path.join(SCRIPT_DIR, "config.yaml.example")
+
+    config = keep_alive.load_config(example)
+
+    assert sorted(config) == sorted(keep_alive.PATH_DEFAULTS)
+    assert not caplog.records
+    with open(example) as f:
+        text = f.read()
+    assert "scopes" not in text
+    assert "accounts" not in text

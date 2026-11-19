@@ -29,13 +29,85 @@ SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 LOGIN_TIMEOUT_SECONDS = 300
 
 
+# Config keys the script reads, with the value used when the key is absent.
+PATH_DEFAULTS = {
+    "client_secret_path": "client_secret.json",
+    "token_path": "token.json",
+}
+
+# Keys older example configs offered that the script has never read.
+UNSUPPORTED_KEYS = ("scopes", "accounts")
+
+
 def load_config(config_path: str) -> dict:
-    """Load configuration from a YAML file."""
+    """Load configuration from a YAML file.
+
+    The top level must be a mapping; an empty mapping (``{}``) is fine and
+    means "use the defaults". Anything else logs one error naming the file and
+    exits with code 1.
+    """
     if not os.path.exists(config_path):
         logging.error("Config file not found: %s", config_path)
         sys.exit(1)
-    with open(config_path, "r") as f:
-        return yaml.safe_load(f)
+    try:
+        with open(config_path, "r") as f:
+            config = yaml.safe_load(f)
+    except (OSError, UnicodeDecodeError) as e:
+        logging.error("Config file %s cannot be read: %s", config_path, e)
+        sys.exit(1)
+    except yaml.YAMLError as e:
+        logging.error(
+            "Config file %s is not valid YAML: %s",
+            config_path,
+            " ".join(str(e).split()),
+        )
+        sys.exit(1)
+    if config is None:
+        logging.error(
+            "Config file %s is empty: it must contain a YAML mapping of "
+            "settings such as token_path (see config.yaml.example)",
+            config_path,
+        )
+        sys.exit(1)
+    if not isinstance(config, dict):
+        logging.error(
+            "Config file %s must contain a YAML mapping of settings such as "
+            "token_path at the top level, but it contains a %s "
+            "(see config.yaml.example)",
+            config_path,
+            type(config).__name__,
+        )
+        sys.exit(1)
+    for key in PATH_DEFAULTS:
+        if key in config and not (isinstance(config[key], str) and config[key]):
+            logging.error(
+                "Config file %s: %s must be a file path, but it is %r",
+                config_path,
+                key,
+                config[key],
+            )
+            sys.exit(1)
+    for key in UNSUPPORTED_KEYS:
+        if key in config:
+            logging.warning(
+                "Config file %s: the %s setting is not supported and is ignored",
+                config_path,
+                key,
+            )
+    return config
+
+
+def resolve_paths(config: dict, base_dir: str) -> dict:
+    """Return a copy of ``config`` with both file paths made absolute.
+
+    A relative ``token_path`` or ``client_secret_path`` (and the default used
+    when the key is absent) is taken relative to ``base_dir``; an absolute
+    path is kept as it is.
+    """
+    resolved = dict(config)
+    for key, default in PATH_DEFAULTS.items():
+        resolved[key] = os.path.join(base_dir, config.get(key, default))
+    return resolved
 
 
 def save_token(token_path: str, token_json: str) -> None:
@@ -140,12 +212,13 @@ def main():
     )
     args = parser.parse_args()
 
-    # Ensure script is run from its directory
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    os.chdir(script_dir)
+    # A relative --config is looked up where the command was started.
+    config_path = os.path.abspath(args.config)
+    config = load_config(config_path)
 
-    # Load configuration
-    config = load_config(args.config)
+    # Relative paths inside the config are taken from the script's folder.
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    config = resolve_paths(config, script_dir)
 
     # Perform a lightweight API call to keep the account active
     try:
