@@ -8,7 +8,10 @@ shows regular API activity.
 ## Features
 
 - OAuth 2.0 installed-app flow against the Gmail API (`gmail.readonly` scope)
-- Caches the authorised token in `token.json` so later runs are non-interactive
+- Caches the authorised token in `token.json` and renews it with its refresh token, so
+  later runs need no browser
+- A scheduled run never waits for a browser: if a manual login is needed it logs how to
+  do it and exits 1
 - YAML config for the client-secret and token file paths
 - Makefile targets for venv setup, running and tests
 
@@ -17,7 +20,7 @@ shows regular API activity.
 - Python 3.9+
 - A Google Cloud project with the Gmail API enabled and an OAuth client of type
   "Desktop app"; download its JSON as `client_secret.json`
-- A browser on the machine for the first run (the consent flow opens a local server)
+- A browser on the machine for the first login (the consent flow opens a local server)
 
 ## Install
 
@@ -47,6 +50,13 @@ cp config.yaml.example config.yaml
 
 `config.yaml`, `client_secret.json` and `token.json` are gitignored. Never commit them.
 
+The token file holds the refresh token and the OAuth client secret, which together give
+read access to all mail in the account. The script always writes it owner-only (mode
+`0600`, whatever the umask, also when an older, wider-readable file is already there)
+and atomically: the new content goes to a temporary file in the same folder and is then
+moved over the old one, so a crash partway leaves the previous token intact.
+`client_secret.json` is yours to protect (`chmod 600 client_secret.json`).
+
 ## Usage
 
 ```bash
@@ -60,18 +70,45 @@ python3 keep_alive.py --config config.yaml
 ```
 
 The script changes into its own directory before loading the config, so relative paths
-resolve against the repository folder. Schedule it daily, for example with cron:
+resolve against the repository folder.
+
+### First login
+
+Run it once by hand, on a machine with a browser:
+
+```bash
+python3 keep_alive.py --config config.yaml --interactive
+```
+
+A browser opens Google's consent page; after you approve, the token is saved to
+`token_path`. The script waits at most 5 minutes for the login and then exits with an
+error. The browser login only ever starts when you pass `--interactive` or when the
+script is run from a terminal (standard input is a terminal).
+
+### Scheduled runs
+
+Schedule it daily, for example with cron:
 
 ```cron
 0 9 * * * cd /path/to/gmail-automation && ./venv/bin/python keep_alive.py --config config.yaml
 ```
+
+Later runs need no browser. The access token expires after about an hour; each run
+renews it with the saved refresh token and writes the result back to `token_path`. Only
+the token file is needed for that.
+
+If Google rejects the refresh token (you revoked the app's access, changed the account
+password in some cases, or the token expired, which happens after 7 days while the OAuth
+consent screen is in "Testing" status), a manual login is needed again. A scheduled run
+does not open a browser or wait for one: it logs one error saying a manual login is
+needed and exits with code 1. Fix it by running the first-login command above once by
+hand. The same happens if the token file is missing.
 
 ## Status
 
 Early prototype. The tests cover it against a fake Gmail; it has not been verified
 against a real Google account. Known gaps:
 
-- Expired tokens trigger a fresh interactive consent flow instead of a refresh.
 - Only one account is supported despite the `accounts` key in the example config.
 
 ## Development
