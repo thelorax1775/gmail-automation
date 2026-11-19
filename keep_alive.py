@@ -84,8 +84,8 @@ def main():
     # Perform a lightweight API call to keep the account active
     try:
         service = get_gmail_service(config)
-        # Example: get profile (lightweight)
-        profile = service.users().profile().get().execute()
+        # Get the account's profile (lightweight, read-only)
+        profile = service.users().getProfile(userId="me").execute()
         logging.info(
             "Keep-alive successful for account: %s", profile.get("emailAddress")
         )
