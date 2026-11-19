@@ -13,7 +13,7 @@ shows regular API activity.
 - A scheduled run never waits for a browser: if a manual login is needed it logs how to
   do it and exits 1
 - YAML config for the client-secret and token file paths
-- Makefile targets for venv setup, running and tests
+- Makefile targets for venv setup, running and tests, all using the project's own venv
 
 ## Requirements
 
@@ -41,12 +41,22 @@ python3 -m venv venv
 cp config.yaml.example config.yaml
 ```
 
-| Key | Used | Meaning |
+| Key | Default | Meaning |
 | --- | --- | --- |
-| `client_secret_path` | yes | Path to the OAuth client JSON from Google Cloud Console |
-| `token_path` | yes | Where the authorised token is cached |
-| `scopes` | no | Ignored; the script hard-codes `gmail.readonly` |
-| `accounts` | no | Ignored; one run covers the single account in `token_path` |
+| `client_secret_path` | `client_secret.json` | Path to the OAuth client JSON from Google Cloud Console |
+| `token_path` | `token.json` | Where the authorised token is cached |
+
+A relative path in either setting is taken from the folder `keep_alive.py` is in,
+wherever you start the script from; an absolute path is used as it is.
+
+`scopes` and `accounts` are not supported: the scope is always `gmail.readonly` and one
+run covers the single account in `token_path`. If a config still has either key, the
+script logs one warning that it is ignored and carries on.
+
+The config file must be a YAML mapping. `{}` is enough and means "use the defaults". A
+file that is empty, has only comments, is not valid YAML or holds something else (a
+list, a plain string) stops the run with exit code 1 and one error line that names the
+file and says what is wrong.
 
 `config.yaml`, `client_secret.json` and `token.json` are gitignored. Never commit them.
 
@@ -66,18 +76,28 @@ make run
 or:
 
 ```bash
-python3 keep_alive.py --config config.yaml
+./venv/bin/python keep_alive.py --config config.yaml
 ```
 
-The script changes into its own directory before loading the config, so relative paths
-resolve against the repository folder.
+`make run` does exactly that, so both use the packages `make install` put into `venv`.
+
+A relative `--config` path is looked up in the folder you run the command from, like any
+other command-line path. So from another folder this works, with `my-config.yaml` in
+that folder:
+
+```bash
+/path/to/gmail-automation/venv/bin/python /path/to/gmail-automation/keep_alive.py --config my-config.yaml
+```
+
+The paths inside the config are different: relative ones are taken from the script's
+folder (see Configuration).
 
 ### First login
 
 Run it once by hand, on a machine with a browser:
 
 ```bash
-python3 keep_alive.py --config config.yaml --interactive
+./venv/bin/python keep_alive.py --config config.yaml --interactive
 ```
 
 A browser opens Google's consent page; after you approve, the token is saved to
@@ -109,7 +129,9 @@ hand. The same happens if the token file is missing.
 Early prototype. The tests cover it against a fake Gmail; it has not been verified
 against a real Google account. Known gaps:
 
-- Only one account is supported despite the `accounts` key in the example config.
+- Only one account is supported: one run covers the single account whose token is in
+  `token_path`. To cover more accounts, schedule one run per account, each with its own
+  config and token file.
 
 ## Development
 
@@ -126,8 +148,12 @@ answers from canned HTTP replies, and `pytest-socket` (`--disable-socket` in
 `pytest.ini`) fails any test that tries to open a network connection.
 
 GitHub Actions (`.github/workflows/ci.yml`) runs `ruff check .` (rules in `ruff.toml`)
-and `pytest` on Python 3.9 and 3.15, plus `make install && make test`, on every pull
-request and on every push to `master`.
+and `pytest` on Python 3.9 and 3.15, plus `make install`, `make test` and a `make run`
+that must get as far as the missing client secret, on every pull request and on every
+push to `master`.
+
+`requirements.txt` gives each package a lower bound and an upper bound below its next
+major version.
 
 ## License
 

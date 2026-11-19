@@ -59,3 +59,17 @@ jobs:
           python-version: "3.15"
       - run: make install
       - run: make test
+      - name: make run starts the script with the venv's Python
+        # No client secret and no token exist here, so a run that gets past its
+        # imports and the config must stop at the missing client secret. The
+        # runner's own Python has none of the packages, so this fails if
+        # `make run` does not use the venv.
+        run: |
+          cp config.yaml.example config.yaml
+          if make run > run.log 2>&1 < /dev/null; then
+            cat run.log
+            echo "make run succeeded without a client secret"
+            exit 1
+          fi
+          cat run.log
+          grep -F "Missing client secrets file" run.log

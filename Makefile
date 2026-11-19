@@ -6,7 +6,7 @@ install:
 	./venv/bin/pip install -r requirements.txt -r requirements-dev.txt
 
 run:
-	python3 keep_alive.py --config config.yaml
+	./venv/bin/python keep_alive.py --config config.yaml
 
 test:
 	./venv/bin/python -m pytest
