@@ -10,7 +10,7 @@ shows regular API activity.
 - OAuth 2.0 installed-app flow against the Gmail API (`gmail.readonly` scope)
 - Caches the authorised token in `token.json` so later runs are non-interactive
 - YAML config for the client-secret and token file paths
-- Makefile targets for venv setup and running
+- Makefile targets for venv setup, running and tests
 
 ## Requirements
 
@@ -68,14 +68,29 @@ resolve against the repository folder. Schedule it daily, for example with cron:
 
 ## Status
 
-Early prototype, not verified end to end. Known gaps:
+Early prototype. The tests cover it against a fake Gmail; it has not been verified
+against a real Google account. Known gaps:
 
-- The keep-alive call uses `users().profile().get()`, which is not a Gmail API method
-  (the real one is `users().getProfile(userId="me")`), so a run is expected to log an
-  error and exit 1 after authenticating.
 - Expired tokens trigger a fresh interactive consent flow instead of a refresh.
 - Only one account is supported despite the `accounts` key in the example config.
-- No tests (`make test` is a placeholder).
+
+## Development
+
+```bash
+make install   # venv with requirements.txt and requirements-dev.txt (pytest, ruff)
+make test      # runs pytest from the venv
+```
+
+or without make: `./venv/bin/python -m pytest` and `./venv/bin/ruff check .`
+
+The tests never contact Google and need no account, client secret or token: the Gmail
+client is built from the API description bundled with `google-api-python-client` and
+answers from canned HTTP replies, and `pytest-socket` (`--disable-socket` in
+`pytest.ini`) fails any test that tries to open a network connection.
+
+GitHub Actions (`.github/workflows/ci.yml`) runs `ruff check .` (rules in `ruff.toml`)
+and `pytest` on Python 3.9 and 3.15, plus `make install && make test`, on every pull
+request and on every push to `master`.
 
 ## License
 
