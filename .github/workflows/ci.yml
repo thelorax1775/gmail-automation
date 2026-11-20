@@ -49,6 +49,31 @@ jobs:
       - name: Test
         run: pytest
 
+  lowest:
+    name: lowest supported versions (Python 3.9)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          enable-cache: false
+      - name: Create a Python 3.9 environment with pip
+        run: |
+          uv venv --seed --python 3.9 "$RUNNER_TEMP/venv"
+          echo "$RUNNER_TEMP/venv/bin" >> "$GITHUB_PATH"
+      - name: Install dependencies with lowest-direct resolution
+        run: |
+          uv pip install --python "$RUNNER_TEMP/venv/bin/python" --resolution lowest-direct -r requirements.txt
+      - name: Install test tools
+        run: |
+          uv pip install --python "$RUNNER_TEMP/venv/bin/python" pytest pytest-socket
+      - name: Show the installed versions
+        run: |
+          python -m pip list
+          python -m pip show google-auth | grep -Fx "Version: 2.23.0"
+      - name: Test
+        run: pytest
+
   make:
     name: make install and make test
     runs-on: ubuntu-latest
