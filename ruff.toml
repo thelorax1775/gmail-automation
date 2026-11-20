@@ -1,0 +1,6 @@
+# Lint rules are pinned here so a new ruff release cannot change what CI checks.
+target-version = "py39"
+
+[lint]
+# pycodestyle errors and pyflakes: real mistakes, not style opinions.
+select = ["E", "F"]

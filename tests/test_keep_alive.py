@@ -100,9 +100,9 @@ def test_gmail_error_exits_1_and_logs_an_error(run_main, tmp_path, caplog):
     service, http = fake_gmail(({"status": "500"}, "{}"))
     config = write_config(tmp_path)
 
-    with mock.patch.object(keep_alive, "get_gmail_service", return_value=service), pytest.raises(
-        SystemExit
-    ) as exit_info:
+    with mock.patch.object(
+        keep_alive, "get_gmail_service", return_value=service
+    ), pytest.raises(SystemExit) as exit_info:
         run_main(config)
 
     assert exit_info.value.code == 1
@@ -226,7 +226,9 @@ def test_broken_token_file_exits_1_and_logs_clear_error(tmp_path, caplog):
     assert token_path.read_text() == broken_content
 
 
-def test_token_file_missing_refresh_token_exits_1_and_logs_clear_error(tmp_path, caplog):
+def test_token_file_missing_refresh_token_exits_1_and_logs_clear_error(
+    tmp_path, caplog
+):
     """Valid JSON without refresh_token -> SystemExit 1, clear error, file unchanged."""
     token_path = tmp_path / "token.json"
     valid_but_bad = '{"client_id": "a", "client_secret": "***", "token": "t"}'
@@ -254,9 +256,12 @@ def test_token_file_missing_refresh_token_exits_1_and_logs_clear_error(tmp_path,
     assert token_path.read_text() == valid_but_bad
 
 
-def test_missing_token_folder_exits_1_before_browser_login(tmp_path, caplog):
+def test_missing_token_folder_exits_1_before_browser_login(
+    tmp_path, caplog
+):
     """token_path folder doesn't exist -> SystemExit 1, clear error, flow not called."""
-    token_path = tmp_path / "missing" / "token.json"  # parent dir 'missing' doesn't exist
+    token_path = tmp_path / "missing" / "token.json"
+    # parent dir 'missing' doesn't exist
     config = {
         "token_path": str(token_path),
         "client_secret_path": str(tmp_path / "client_secret.json"),

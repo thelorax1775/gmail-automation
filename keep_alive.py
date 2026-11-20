@@ -44,7 +44,8 @@ def get_gmail_service(config: dict):
             creds = Credentials.from_authorized_user_file(token_path, SCOPES)
         except (ValueError, OSError) as e:
             logging.error(
-                "Token file %s cannot be used (%s). Delete it and log in again: python3 keep_alive.py --config <config> --interactive",
+                "Token file %s cannot be used (%s). Delete it and log in again: "
+                "python3 keep_alive.py --config <config> --interactive",
                 token_path,
                 e,
             )
