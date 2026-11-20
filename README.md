@@ -162,7 +162,9 @@ that must get as far as the missing client secret, on every pull request and on 
 push to `master`.
 
 `requirements.txt` gives each package a lower bound and an upper bound below its next
-major version.
+major version. CI also runs the tests on Python 3.9 with exactly those lowest versions
+(`uv pip install --resolution lowest-direct -r requirements.txt`), so the lower bounds
+stay true.
 
 ## License
 
