@@ -124,6 +124,15 @@ does not open a browser or wait for one: it logs one error saying a manual login
 needed and exits with code 1. Fix it by running the first-login command above once by
 hand. The same happens if the token file is missing.
 
+If the token file exists but cannot be read (corrupted JSON or missing required fields
+such as `refresh_token`), the script stops with exit code 1 and logs an error that names
+the file and says how to fix it (delete the file and run the first-login command with
+`--interactive`). The token file is never deleted or modified by the script.
+
+If `token_path` points to a folder that does not exist, the browser login is never
+started: the script logs an error naming the missing folder and exits with code 1 before
+any OAuth consent flow begins. Create the folder first, then run the first-login command.
+
 ## Status
 
 Early prototype. The tests cover it against a fake Gmail; it has not been verified

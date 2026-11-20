@@ -152,7 +152,16 @@ def get_gmail_service(config: dict, interactive: bool = False):
 
     # Load existing token if it exists
     if os.path.exists(token_path):
-        creds = Credentials.from_authorized_user_file(token_path, SCOPES)
+        try:
+            creds = Credentials.from_authorized_user_file(token_path, SCOPES)
+        except (ValueError, OSError) as e:
+            logging.error(
+                "Token file %s cannot be used (%s). Delete it and log in again: "
+                "python3 keep_alive.py --config <config> --interactive",
+                token_path,
+                e,
+            )
+            sys.exit(1)
 
     # Renew an expired access token silently with the refresh token
     if creds and not creds.valid and creds.refresh_token:
@@ -178,6 +187,11 @@ def get_gmail_service(config: dict, interactive: bool = False):
                 "Run once by hand with --interactive to log in through a "
                 "browser: python3 keep_alive.py --config <config> --interactive"
             )
+            sys.exit(1)
+        # Check that the token file's directory exists before starting the browser flow
+        token_dir = os.path.dirname(token_path)
+        if token_dir and not os.path.isdir(token_dir):
+            logging.error("The folder for token_path does not exist: %s", token_dir)
             sys.exit(1)
         flow = InstalledAppFlow.from_client_secrets_file(
             client_secret_path, SCOPES

@@ -200,6 +200,91 @@ def test_valid_token_end_to_end_run_succeeds(run_main, tmp_path, caplog):
 # --- Token refresh, the login guard and the token file -----------------------
 
 
+def test_invalid_json_token_exits_1(tmp_path, caplog):
+    """Invalid JSON in token file -> SystemExit 1, clear error, file unchanged."""
+    token_path = tmp_path / "token.json"
+    token_path.write_text('{"refresh_token": "***", "client_id"')
+    before = token_path.read_bytes()
+
+    config = {
+        "token_path": str(token_path),
+        "client_secret_path": str(tmp_path / "client_secret.json"),
+    }
+    (tmp_path / "client_secret.json").write_text("{}")
+
+    with mock.patch.object(keep_alive, "InstalledAppFlow") as flow, mock.patch.object(
+        keep_alive, "build"
+    ):
+        with pytest.raises(SystemExit) as exit_info:
+            keep_alive.get_gmail_service(config)
+
+    assert exit_info.value.code == 1
+    assert "Token file" in caplog.text
+    assert str(token_path) in caplog.text
+    assert "cannot be used" in caplog.text
+    assert "--interactive" in caplog.text
+    assert token_path.read_bytes() == before  # file unchanged
+    flow.from_client_secrets_file.assert_not_called()
+
+
+def test_token_missing_refresh_token_exits_1_and_logs_clear_error(
+    tmp_path, caplog
+):
+    """Valid JSON without refresh_token -> SystemExit 1, clear error, file unchanged."""
+    token_path = tmp_path / "token.json"
+    token_path.write_text(
+        json.dumps(
+            {
+                "client_id": "a",
+                "client_secret": "***",
+                "token": "t",
+            }
+        )
+    )
+    before = token_path.read_bytes()
+
+    config = {
+        "token_path": str(token_path),
+        "client_secret_path": str(tmp_path / "client_secret.json"),
+    }
+    (tmp_path / "client_secret.json").write_text("{}")
+
+    with mock.patch.object(keep_alive, "InstalledAppFlow") as flow, mock.patch.object(
+        keep_alive, "build"
+    ):
+        with pytest.raises(SystemExit) as exit_info:
+            keep_alive.get_gmail_service(config)
+
+    assert exit_info.value.code == 1
+    assert "Token file" in caplog.text
+    assert str(token_path) in caplog.text
+    assert "cannot be used" in caplog.text
+    assert "--interactive" in caplog.text
+    assert token_path.read_bytes() == before  # file unchanged
+    flow.from_client_secrets_file.assert_not_called()
+
+
+def test_missing_token_folder_exits_1_before_browser_login(tmp_path, caplog):
+    """token_path folder doesn't exist -> SystemExit 1, clear error, flow not called."""
+    token_path = tmp_path / "missing" / "token.json"
+
+    config = {
+        "token_path": str(token_path),
+        "client_secret_path": str(tmp_path / "client_secret.json"),
+    }
+    (tmp_path / "client_secret.json").write_text("{}")
+
+    with mock.patch.object(keep_alive, "InstalledAppFlow") as flow, mock.patch.object(
+        keep_alive, "build"
+    ):
+        with pytest.raises(SystemExit) as exit_info:
+            keep_alive.get_gmail_service(config, interactive=True)
+
+    assert exit_info.value.code == 1
+    assert "The folder for token_path does not exist" in caplog.text
+    flow.from_client_secrets_file.assert_not_called()
+
+
 def write_expired_token(tmp_path, mode=None):
     """An authorised-user file whose access token expired in 2020. Fake values."""
     path = tmp_path / "token.json"
