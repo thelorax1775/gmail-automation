@@ -129,6 +129,17 @@ such as `refresh_token`), the script stops with exit code 1 and logs an error th
 the file and says how to fix it (delete the file and run the first-login command with
 `--interactive`). The token file is never deleted or modified by the script.
 
+If the token file holds valid JSON of the wrong shape (e.g. an array, null, a string or
+a number instead of an object), the script stops with exit code 1 and logs an error that
+names the file and says how to fix it (delete the file and run the first-login command
+with `--interactive`). The token file is never deleted or modified by the script.
+
+If `client_secret.json` is not valid JSON or does not contain a valid OAuth client
+configuration for a "Desktop app", the script stops with exit code 1 and logs an error
+that names the file and says how to fix it (download the OAuth client of type "Desktop
+app" from Google Cloud Console and save it there). The client secrets file is never
+modified by the script.
+
 If `token_path` points to a folder that does not exist, the browser login is never
 started: the script logs an error naming the missing folder and exits with code 1 before
 any OAuth consent flow begins. Create the folder first, then run the first-login command.

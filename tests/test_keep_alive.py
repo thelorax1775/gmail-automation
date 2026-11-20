@@ -264,6 +264,79 @@ def test_token_missing_refresh_token_exits_1_and_logs_clear_error(
     flow.from_client_secrets_file.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    "bad_content",
+    [
+        "[]",
+        "null",
+        '"abc"',
+        "42",
+    ],
+    ids=["list", "null", "string", "number"],
+)
+def test_wrong_shape_token_exits_1(tmp_path, caplog, bad_content):
+    """Token file holds valid JSON of the wrong shape -> SystemExit 1, clear error."""
+    token_path = tmp_path / "token.json"
+    token_path.write_text(bad_content)
+    before = token_path.read_bytes()
+
+    config = {
+        "token_path": str(token_path),
+        "client_secret_path": str(tmp_path / "client_secret.json"),
+    }
+    (tmp_path / "client_secret.json").write_text("{}")
+
+    with mock.patch.object(keep_alive, "InstalledAppFlow") as flow, mock.patch.object(
+        keep_alive, "build"
+    ):
+        with pytest.raises(SystemExit) as exit_info:
+            keep_alive.get_gmail_service(config)
+
+    assert exit_info.value.code == 1
+    assert "Token file" in caplog.text
+    assert str(token_path) in caplog.text
+    assert "cannot be used" in caplog.text
+    assert "--interactive" in caplog.text
+    assert token_path.read_bytes() == before  # file unchanged
+    flow.from_client_secrets_file.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "bad_content",
+    [
+        "not json",
+        "[]",
+        "{}",
+        '{"installed": "x"}',
+    ],
+    ids=["not-json", "empty-list", "empty-object", "wrong-shape"],
+)
+def test_unusable_client_secrets_exits_1(tmp_path, caplog, bad_content):
+    """Client secrets file not JSON or wrong shape -> SystemExit 1, clear error."""
+    token_path = tmp_path / "token.json"
+    client_secret_path = tmp_path / "client_secret.json"
+    client_secret_path.write_text(bad_content)
+
+    config = {
+        "token_path": str(token_path),
+        "client_secret_path": str(client_secret_path),
+    }
+
+    with mock.patch.object(
+        keep_alive.InstalledAppFlow, "run_local_server"
+    ) as run_local_server, mock.patch.object(keep_alive, "build"):
+        with pytest.raises(SystemExit) as exit_info:
+            keep_alive.get_gmail_service(config, interactive=True)
+
+    assert exit_info.value.code == 1
+    assert "Client secrets file" in caplog.text
+    assert str(client_secret_path) in caplog.text
+    assert "cannot be used" in caplog.text
+    assert "Desktop app" in caplog.text
+    run_local_server.assert_not_called()
+    assert not token_path.exists()
+
+
 def test_missing_token_folder_exits_1_before_browser_login(tmp_path, caplog):
     """token_path folder doesn't exist -> SystemExit 1, clear error, flow not called."""
     token_path = tmp_path / "missing" / "token.json"

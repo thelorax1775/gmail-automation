@@ -154,7 +154,7 @@ def get_gmail_service(config: dict, interactive: bool = False):
     if os.path.exists(token_path):
         try:
             creds = Credentials.from_authorized_user_file(token_path, SCOPES)
-        except (ValueError, OSError) as e:
+        except (ValueError, OSError, AttributeError, TypeError) as e:
             logging.error(
                 "Token file %s cannot be used (%s). Delete it and log in again: "
                 "python3 keep_alive.py --config <config> --interactive",
@@ -193,9 +193,19 @@ def get_gmail_service(config: dict, interactive: bool = False):
         if token_dir and not os.path.isdir(token_dir):
             logging.error("The folder for token_path does not exist: %s", token_dir)
             sys.exit(1)
-        flow = InstalledAppFlow.from_client_secrets_file(
-            client_secret_path, SCOPES
-        )
+        try:
+            flow = InstalledAppFlow.from_client_secrets_file(
+                client_secret_path, SCOPES
+            )
+        except (ValueError, OSError, AttributeError, TypeError) as e:
+            logging.error(
+                "Client secrets file %s cannot be used (%s). Download the OAuth "
+                "client of type \"Desktop app\" from Google Cloud Console "
+                "and save it there",
+                client_secret_path,
+                e,
+            )
+            sys.exit(1)
         creds = flow.run_local_server(
             port=0, timeout_seconds=LOGIN_TIMEOUT_SECONDS
         )
