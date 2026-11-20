@@ -3,13 +3,13 @@
 
 install:
 	python3 -m venv venv
-	./venv/bin/pip install -r requirements.txt
+	./venv/bin/pip install -r requirements.txt -r requirements-dev.txt
 
 run:
 	python3 keep_alive.py --config config.yaml
 
 test:
-	@echo "No test suite defined yet."
+	./venv/bin/python -m pytest
 
 clean:
 	rm -rf venv __pycache__ *.pyc
