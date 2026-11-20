@@ -40,11 +40,25 @@ def get_gmail_service(config: dict):
 
     # Load existing token if it exists
     if os.path.exists(token_path):
-        creds = Credentials.from_authorized_user_file(token_path, SCOPES)
+        try:
+            creds = Credentials.from_authorized_user_file(token_path, SCOPES)
+        except (ValueError, OSError) as e:
+            logging.error(
+                "Token file %s cannot be used (%s). Delete it and log in again: python3 keep_alive.py --config <config> --interactive",
+                token_path,
+                e,
+            )
+            sys.exit(1)
 
     # If no valid credentials, run the OAuth flow
     if not creds or not creds.valid:
         if os.path.exists(client_secret_path):
+            # Check that the token_path's folder exists before starting the flow
+            token_dir = os.path.dirname(token_path)
+            if token_dir and not os.path.isdir(token_dir):
+                logging.error("The folder for token_path does not exist: %s", token_dir)
+                sys.exit(1)
+
             flow = InstalledAppFlow.from_client_secrets_file(
                 client_secret_path, SCOPES
             )

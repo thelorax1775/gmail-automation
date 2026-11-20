@@ -66,6 +66,8 @@ resolve against the repository folder. Schedule it daily, for example with cron:
 0 9 * * * cd /path/to/gmail-automation && ./venv/bin/python keep_alive.py --config config.yaml
 ```
 
+If the token file cannot be read (corrupted JSON or missing required fields), the script exits with code 1 and logs an error naming the file and suggesting to delete it and re-run with `--interactive`. The folder containing `token_path` must exist; if it does not, the script exits with code 1 before opening the browser login, so the consent flow is not wasted.
+
 ## Status
 
 Early prototype, not verified end to end. Known gaps:
